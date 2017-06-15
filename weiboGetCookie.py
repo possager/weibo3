@@ -21,171 +21,6 @@ proxyInUsing=[]
 
 proxyWouldChange=set([])
 
-
-class CookieGetWithoutLogin:
-    def __init__(self,url=None,useProxy=False):
-        self.IPproxy=None
-        self.useIPproxy=useProxy
-
-        self.client=pymongo.MongoClient('localhost',27017)
-        self.COL=self.client['WeiboLogin']
-        self.cookiewithoutDOC=self.COL['CookieWithoutLogin']
-
-
-        self.connect=MySQLdb.connect(host='127.0.0.1',user='root',passwd='asd123456',charset='utf8')
-        self.cursor=self.connect.cursor()
-
-        # self.COL = self.client['WeiboLogin']
-        self.cookieDOC = self.COL['cookieDoc']
-        self.proxyCOL = self.client['IpProxy2']
-        self.proxyDOC = self.proxyCOL['weiboDOC']
-
-
-        self.proxyIPport=None
-        self.proxytype='Https'
-        self.proxyIP = None
-        self.purpose = None
-        self.proxyhandler = None
-
-        self.url=url
-        self.header={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36'}
-        self.cookie=cookielib.LWPCookieJar()
-        self.cookieHandler=None
-        self.openner=None
-
-
-        self.request=None
-        self.response=None
-
-    def enableCookie(self,purpose=None):#default来表示默认的用途,就是随便使用,若是想制定爬去某个层次的内容的话,在default里边支出
-
-        self.purpose=purpose
-        requestsproxy=None
-        if self.useIPproxy:
-            proxylist=[]
-            for i in self.proxyDOC.find_one({'used':False},{'_id':0}):
-                proxylist.append({
-                    'ip':i['ip'],
-                    'port':i['port'],
-                    'proxytype':i['proxytype']
-                })
-
-            proxyinthis=proxylist.pop()
-            self.proxyDOC.update({'ip':proxyinthis['ip']},{'$set':{'used':True}})
-
-            self.proxyIP=proxyinthis['ip']#之所以把它写到self里,因为外边调用后如果成功了,会将self中的内容写到数据库中.
-            self.proxyIPport=proxyinthis['port']
-            self.proxytype=proxyinthis['proxytype']
-
-            # self.proxyIP='122.70.141.42'
-            # self.proxyIPport='80'
-            # self.proxytype='https'
-
-            print '-----------'+self.proxyIP+':'+self.proxyIPport
-
-
-            self.cookie=cookielib.LWPCookieJar()
-            self.cookieHandler=urllib2.HTTPCookieProcessor(self.cookie)
-
-            self.proxyhandler = urllib2.ProxyHandler({proxyinthis['proxytype']: proxyinthis['proxytype']+'://%s:%s' % (self.proxyIP, self.proxyIPport)})
-            self.openner = urllib2.build_opener(self.cookieHandler, self.proxyhandler)
-            # proxy_support=urllib2.ProxyHandler({'http':'http://115.85.233.94:80'})
-            # self.openner=urllib2.build_opener(self.cookieHandler,urllib2.HTTPHandler,proxy_support)
-        else:
-            self.cookieHandler=urllib2.HTTPCookieProcessor(self.cookie)
-            self.openner=urllib2.build_opener(self.cookieHandler)#5-19去掉了,urllib2.HttpHandler
-        # urllib2.install_opener(openner)
-        # urllib2.install_opener(openner)
-
-
-        #需要在这里检查一下代理ip是否可用,如果可用再返回,不管用没用代理,这里都可以,如果没用太低的话,delete就会删除不了东西.
-
-        try:
-            self.run()
-        except Exception as e:
-            print e
-            self.proxyDOC.update({'ip': self.proxyIP},{'$set':{'drop':'can not use'}},upsert=True)
-            self.enableCookie()
-
-        # requestsproxy=urllib2.Request(url='http://login.sina.com.cn/crossdomain2.php?action=login',headers=self.header)
-        # data=self.openner.open(requestsproxy).read()
-        # if len(data)>100:
-        #     pass
-        # else:#如果这个代理ip不能用,先从数据库中删除,之后再来一次
-        #     self.proxyDOC.delete_one({'ip':self.proxyIP})
-        #     self.enableCookie()
-
-        return self
-
-
-
-    def urlget(self):
-        for i in self.DOC.find({},{'_id':0,'forum_url':1}).limit(10):
-            yield i['forum_url']
-            # self.DOC.update({'forum_url':i['forum_url']},{'dealed':True},upsert=True)
-
-    def run(self):
-
-
-        url_visiter_visiter1='https://passport.weibo.com/visitor/visitor?a=incarnate&t='
-        beforeurllist=[
-            'http://login.sina.com.cn/sso/prelogin.php?entry=weibo&callback=sinaSSOController.preloginCallBack&su=&rsakt=mod&client=ssologin.js(v1.4.18)',
-            'http://login.sina.com.cn/crossdomain2.php?action=login',
-            'http://i.sso.sina.com.cn/js/ssologin.js',
-            # 'https://login.sina.com.cn/cgi/pin.php',
-            'http://weibo.com/login.php',
-            'https://passport.weibo.com/visitor/visitor',
-            'http://weibo.com/aj/v6/top/topnavthird',
-            'https://passport.weibo.com/visitor/visitor?a=incarnate&t=VIPZmdsCw%2BQyrNnxcNovFvODkEmJ5oUDUTdByeL5Pco%3D&w=2&c=095&gc=&cb=cross_domain&from=weibo&_rand=0.10277698794252332',#这里边的有些东西是可以换的095不可以换,但是之前的貌似可以
-            'https://login.sina.com.cn/visitor/visitor?a=crossdomain&cb=return_back&s=_2AkMue28jf8NxqwJRmP8dyGngZIhxyw_EieKYJ574JRMxHRl-yT83qnFftRAkUXaBBP2h00j10Z7Ne2xSYkQMEg..&sp=0033WrSXqPxfM72-Ws9jqgMF55529P9D9W555Mkrw4C8Pv59U1xT0MxL&from=weibo&_rand=0.2432791179006497',
-            'http://weibo.com',
-            'https://login.sina.com.cn/',
-        ]
-        for i in beforeurllist:
-            request=urllib2.Request(url=i,headers=self.header)
-            data=self.openner.open(request,timeout=5000)
-            print data.url
-            print data.headers
-            time.sleep(0.1)
-
-        print self.cookie
-        cookiedictwithoutlogin={}
-        try:
-            for i in self.cookie:
-                cookiedictwithoutlogin[i['name']]=i['value']
-                # self.cookiewithoutDOC.insert({i['name']:i['value']})
-            # self.cookiewithoutDOC.insert({'tid':'VIPZmdsCw+QyrNnxcNovFvODkEmJ5oUDUTdByeL5Pco=__095'})
-            # self.cookiewithoutDOC.insert({'proxyIP':self.proxyIP})
-            # self.cookiewithoutDOC.insert({'proxyIPport':self.proxyIPport})
-            # self.cookiewithoutDOC.insert({'proxytype':self.proxytype})
-            cookiedictwithoutlogin['tid']='VIPZmdsCw+QyrNnxcNovFvODkEmJ5oUDUTdByeL5Pco=__095'
-            cookiedictwithoutlogin['proxyIP']=self.proxyIP
-            cookiedictwithoutlogin['proxyIPport']=self.proxyIPport
-            cookiedictwithoutlogin['proxytype']=self.proxytype
-            self.cookiewithoutDOC.insert(cookiedictwithoutlogin)
-        except Exception as e:
-            print e#153.101.205.25:3128--------203.110.170.50:80
-
-
-
-        # for i in self.urlget():
-        #     redict_url=''
-        #     while 'http://weibo.com/1258954655/F3EDzbEyh' not in redict_url:
-        #         self.request=urllib2.Request(url=i,headers=self.header)
-        #         data=self.openner.open(self.request)
-        #         print data.url
-        #         redict_url=data.url
-        #         datasoup=BeautifulSoup(data.read(),'lxml')
-        #         print datasoup
-        #         time.sleep(5)
-
-        # response=self.openner.open(self.request)
-        # data=response.read()
-        # datasoup=BeautifulSoup(data,'lxml')
-
-
-
-
 class CookieGet2:
     def __init__(self):
         self.connect=MySQLdb.connect(host='127.0.0.1',user='root',passwd='asd123456',charset='utf8')
@@ -245,42 +80,50 @@ class CookieGet2:
         except Exception as e:
             print e
             return
+        try:
+            ceshi=datajson['data']
+        except Exception as e:
+            print e
+
         for json1 in datajson['data']:
-            id = json1['id']
-            text = json1['text']
-            # source=json1['source']
-            if u'分钟前' in json1['created_at']:
-                d = time.time() - 60*int(json1['create_at'].replace('分钟前'))
-                created_at= time.strftime('%Y-%m-%d %H:%M', time.localtime(d))
-            elif u'今天' in json1['created_at']:
-                created_at=str(datetime.date.today())+json1['created_at'].replace(u'今天','')
-            else:
-                created_at='2017-'+json1['created_at']
+            try:#我也不知道为什么要写这么多try,反正就是写
+                id = json1['id']
+                text = json1['text']
+                # source=json1['source']
+                if u'分钟前' in json1['created_at']:
+                    d = time.time() - 60*int(json1['create_at'].replace('分钟前'))
+                    created_at= time.strftime('%Y-%m-%d %H:%M', time.localtime(d))
+                elif u'今天' in json1['created_at']:
+                    created_at=str(datetime.date.today())+json1['created_at'].replace(u'今天','')
+                else:
+                    created_at='2017-'+json1['created_at']
 
-            raw_text=''
+                raw_text=''
 
-            try:
-                raw_text = json1['raw_text']
-            except Exception as e:
-                print e
-            userdata = json1['user']
+                try:
+                    raw_text = json1['raw_text']
+                except Exception as e:
+                    print e
+                userdata = json1['user']
 
-            userid = userdata['id']
-            userprofile_url = userdata['profile_url']
-            userscreen_name = userdata['screen_name']
-            userverified = userdata['verified']
-            userverified_type = userdata['verified_type']
+                userid = userdata['id']
+                userprofile_url = userdata['profile_url']
+                userscreen_name = userdata['screen_name']
+                userverified = userdata['verified']
+                userverified_type = userdata['verified_type']
 
-            print id, text, created_at, userid, userscreen_name, userprofile_url
-            # yield [id,text,raw_text,created_at,userid,userscreen_name,userprofile_url,userverified,userverified_type]
-            try:
-                sqlZhuanfalist='INSERT INTO weibo.weiboEslDScVTn (postid,zhuanfa_text,raw_text,create_at,userid,userscreen_name,userprofile_url,userverified,userverified_type)' \
-                               'VALUE (%d,"%s","%s","%s",%d,"%s","%s",%d,%d)'%(
-                    id,text,raw_text,created_at,userid,userscreen_name,userprofile_url,userverified,userverified_type
-                )
-                print sqlZhuanfalist
-                cursor.execute(sqlZhuanfalist)
-                connectZhuanFa.commit()
+                print id, text, created_at, userid, userscreen_name, userprofile_url
+                # yield [id,text,raw_text,created_at,userid,userscreen_name,userprofile_url,userverified,userverified_type]
+                try:
+                    sqlZhuanfalist='INSERT INTO weibo.weiboEslDScVTn (postid,zhuanfa_text,raw_text,create_at,userid,userscreen_name,userprofile_url,userverified,userverified_type)' \
+                                   'VALUE (%d,"%s","%s","%s",%d,"%s","%s",%d,%d)'%(
+                        id,text,raw_text,created_at,userid,userscreen_name,userprofile_url,userverified,userverified_type
+                    )
+                    print sqlZhuanfalist
+                    cursor.execute(sqlZhuanfalist)
+                    connectZhuanFa.commit()
+                except Exception as e:
+                    print e
             except Exception as e:
                 print e
 
